@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strings"
 	"github.com/joho/godotenv"
 )
 
@@ -13,12 +14,9 @@ type IPInfo struct {
 	IP       string `json:"client_ip"`
 	Location string `json:"location"`
 	Greeting string `json:"greeting"`
-	
 }
 
-func getIPInfo() (*IPInfo, error) {
-	
-
+func getIPInfo(visitorName string) (*IPInfo, error) {
 	resp, err := http.Get("https://ipapi.co/json/")
 	if err != nil {
 		return nil, err
@@ -35,9 +33,12 @@ func getIPInfo() (*IPInfo, error) {
 		return nil, err
 	}
 
-   city := data["city"].(string)
+	city, ok := data["city"].(string)
+	if !ok || city == "" {
+		return nil, fmt.Errorf("city not found in IP API response")
+	}
 
-   apiKey := os.Getenv("OPENWEATHER_API_KEY")
+	apiKey := os.Getenv("OPENWEATHER_API_KEY")
 	weatherResp, err := http.Get(fmt.Sprintf("https://api.openweathermap.org/data/2.5/weather?q=%s&appid=%s&units=metric", city, apiKey))
 	if err != nil {
 		return nil, err
@@ -53,31 +54,35 @@ func getIPInfo() (*IPInfo, error) {
 		return nil, err
 	}
 
-	
-	temperature := weatherData["main"].(map[string]interface{})["temp"].(float64)
+	temperature, ok := weatherData["main"].(map[string]interface{})["temp"].(float64)
+	if !ok {
+		return nil, fmt.Errorf("temperature not found in weather API response")
+	}
 
 	name := os.Getenv("NAME")
 	if name == "" {
 		name = "six-shot"
 	}
 
-		greeting := fmt.Sprintf("Hello, %s!, The temperature is %.1f degrees Celsius in %s", name, temperature, city)
+	if visitorName != "" {
+		visitorName = strings.Trim(visitorName, "\"")
+		name = visitorName
+	}
+
+	greeting := fmt.Sprintf("Hello, %s! The temperature is %.1f degrees Celsius in %s", name, temperature, city)
 
 	info := &IPInfo{
 		IP:       data["ip"].(string),
-		Location: data["city"].(string), // Using "city" as Location
+		Location: city,
 		Greeting: greeting,
-		
 	}
 
 	return info, nil
 }
 
-
-
-
 func handler(w http.ResponseWriter, r *http.Request) {
-	ipInfo, err := getIPInfo()
+	visitorName := r.URL.Query().Get("visitor_name")
+	ipInfo, err := getIPInfo(visitorName)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -88,13 +93,12 @@ func handler(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	
 	err := godotenv.Load()
 	if err != nil {
 		fmt.Println("Error loading .env file")
 	}
 
-	http.HandleFunc("/", handler)
+	http.HandleFunc("/api/hello", handler)
 	fmt.Println("Server listening on port 8000")
 	if err := http.ListenAndServe(":8000", nil); err != nil {
 		panic(err)
