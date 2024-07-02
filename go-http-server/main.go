@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"github.com/joho/godotenv"
@@ -65,6 +66,10 @@ func getIPInfo(visitorName string) (*IPInfo, error) {
 	}
 
 	if visitorName != "" {
+		decodedName, err := url.QueryUnescape(visitorName)
+		if err == nil {
+			visitorName = decodedName
+		}
 		visitorName = strings.Trim(visitorName, "\"")
 		name = visitorName
 	}
